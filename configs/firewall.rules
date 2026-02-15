@@ -1,0 +1,127 @@
+#!/usr/sbin/nft -f
+# ============================================================
+# Enterprise Network Lab — nftables Firewall Rules
+# ============================================================
+# Applied on: Core Switch / Firewall host
+# Purpose: Control traffic between VLANs, allow essential services,
+#          block lateral movement, enable NAT for internet access
+# ============================================================
+
+flush ruleset
+
+# --- Define Variables ---
+define WAN_IF   = "eth0"
+define LAN_IF   = "eth1"
+define VLAN10   = "vlan10"
+define VLAN20   = "vlan20"
+
+define VLAN10_NET = 10.0.10.0/24
+define VLAN20_NET = 10.0.20.0/24
+
+define DNS_SERVER  = 10.0.10.10
+define DHCP_SERVER = 10.0.10.11
+define WEB_SERVER  = 10.0.10.12
+
+# ============================================================
+# TABLE: inet filter (IPv4 + IPv6)
+# ============================================================
+table inet filter {
+
+    # --- INPUT chain (traffic TO the firewall itself) ---
+    chain input {
+        type filter hook input priority 0; policy drop;
+
+        # Allow established/related connections
+        ct state established,related accept
+
+        # Allow loopback
+        iif "lo" accept
+
+        # Allow ICMP (ping) for diagnostics
+        ip protocol icmp accept
+
+        # Allow SSH from internal networks only
+        tcp dport 22 ip saddr { $VLAN10_NET, $VLAN20_NET } accept
+
+        # Log and drop everything else
+        log prefix "[NFT-INPUT-DROP] " counter drop
+    }
+
+    # --- FORWARD chain (traffic THROUGH the firewall) ---
+    chain forward {
+        type filter hook forward priority 0; policy drop;
+
+        # Allow established/related connections
+        ct state established,related accept
+
+        # === VLAN 20 (Clients) → VLAN 10 (Servers) ===
+
+        # Allow Clients to reach DNS server (UDP/TCP 53)
+        ip saddr $VLAN20_NET ip daddr $DNS_SERVER tcp dport 53 accept
+        ip saddr $VLAN20_NET ip daddr $DNS_SERVER udp dport 53 accept
+
+        # Allow Clients to reach Web server (HTTP/HTTPS)
+        ip saddr $VLAN20_NET ip daddr $WEB_SERVER tcp dport { 80, 443 } accept
+
+        # Allow Clients to reach DHCP server
+        ip saddr $VLAN20_NET ip daddr $DHCP_SERVER udp dport { 67, 68 } accept
+
+        # Allow ICMP between VLANs (for troubleshooting)
+        ip saddr $VLAN20_NET ip daddr $VLAN10_NET ip protocol icmp accept
+
+        # === VLAN 10 (Servers) → VLAN 20 (Clients) ===
+        # Block servers from initiating connections to client VLAN
+        # (only established/related are allowed above)
+
+        # === Outbound Internet Access ===
+        # Allow both VLANs to reach the internet
+        ip saddr $VLAN10_NET oifname $WAN_IF accept
+        ip saddr $VLAN20_NET oifname $WAN_IF accept
+
+        # === Block lateral movement (default drop) ===
+        # Any traffic not explicitly allowed is dropped
+        log prefix "[NFT-FORWARD-DROP] " counter drop
+    }
+
+    # --- OUTPUT chain (traffic FROM the firewall) ---
+    chain output {
+        type filter hook output priority 0; policy accept;
+    }
+}
+
+# ============================================================
+# TABLE: ip nat (Network Address Translation)
+# ============================================================
+table ip nat {
+
+    # --- Source NAT for outbound internet ---
+    chain postrouting {
+        type nat hook postrouting priority 100;
+
+        # Masquerade all internal traffic going to WAN
+        oifname $WAN_IF masquerade
+    }
+
+    # --- Destination NAT (Port Forwarding) ---
+    chain prerouting {
+        type nat hook prerouting priority -100;
+
+        # Example: Forward external port 8080 to internal web server
+        # iifname $WAN_IF tcp dport 8080 dnat to $WEB_SERVER:80
+    }
+}
+
+# ============================================================
+# Verification Commands:
+#   sudo nft list ruleset          — View active rules
+#   sudo nft list table inet filter — View filter table
+#   sudo nft list counters         — View packet counters
+#   sudo nft monitor               — Real-time rule matching
+#
+# Testing:
+#   From VLAN 20 client:
+#     dig @10.0.10.10 web.enterprise.lab    (should work)
+#     curl http://10.0.10.12                (should work)
+#     ssh 10.0.10.10                        (should be BLOCKED)
+#     ping 10.0.10.10                       (should work)
+# ============================================================

@@ -1,0 +1,14 @@
+# Packet captures (generated at runtime)
+*.pcap
+
+# Editor files
+*.swp
+*.bak
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temp files
+/tmp/

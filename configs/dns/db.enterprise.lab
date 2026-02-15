@@ -1,0 +1,38 @@
+; ============================================================
+; DNS Zone File — enterprise.lab
+; Enterprise Network Lab
+; ============================================================
+; Location: /etc/bind/zones/db.enterprise.lab
+; ============================================================
+
+$TTL    604800
+@       IN      SOA     dns.enterprise.lab. admin.enterprise.lab. (
+                        2024020101  ; Serial (YYYYMMDDNN)
+                        604800      ; Refresh  (7 days)
+                        86400       ; Retry    (1 day)
+                        2419200     ; Expire   (28 days)
+                        604800 )    ; Negative TTL (7 days)
+
+; --- Name Servers ---
+@               IN      NS      dns.enterprise.lab.
+
+; --- Infrastructure Records ---
+router          IN      A       10.0.10.1
+gateway         IN      A       10.0.10.1
+firewall        IN      A       10.0.1.2
+core-switch     IN      A       10.0.1.2
+
+; --- Server VLAN (10.0.10.0/24) ---
+dns             IN      A       10.0.10.10
+ns1             IN      A       10.0.10.10
+dhcp            IN      A       10.0.10.11
+web             IN      A       10.0.10.12
+www             IN      CNAME   web.enterprise.lab.
+
+; --- Client VLAN (10.0.20.0/24) ---
+linux-client    IN      A       10.0.20.100
+win-client      IN      A       10.0.20.101
+
+; --- Service Aliases ---
+mail            IN      A       10.0.10.12
+ftp             IN      CNAME   web.enterprise.lab.
