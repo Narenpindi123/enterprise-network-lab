@@ -4,6 +4,21 @@ A fully functional enterprise network lab built from scratch using **Linux netwo
 
 > **This project proves you can design, build, and troubleshoot enterprise infrastructure — not just scan things.**
 
+> Linux network namespaces were chosen over virtual machines to demonstrate low-level control of L2/L3 networking, routing tables, firewalling, and packet flow on a single host — similar to how containers and modern network appliances operate internally.
+
+---
+
+## 🧩 Real-World Enterprise Mapping
+
+| Lab Component | Enterprise Equivalent |
+|:--------------|:----------------------|
+| `ns-router` | Edge router / Layer-3 switch |
+| `br-vlan10` / `br-vlan20` | Access switches with VLAN segmentation |
+| `nftables` | Firewall / ACL policy enforcement |
+| `dnsmasq` | Internal DNS service |
+| `validate-network.sh` | NOC health checks |
+| `troubleshooting/*.md` | Incident runbooks |
+
 ---
 
 ## 📐 Network Architecture
