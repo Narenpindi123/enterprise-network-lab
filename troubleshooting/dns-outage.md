@@ -13,7 +13,6 @@ Users on VLAN 20 (Clients) report they **cannot browse the web** or reach intern
 
 ## Screenshot — Symptom Observed
 
-![DNS resolution failing on client — nslookup times out](screenshots/dns-outage-symptom.png)
 
 ---
 
@@ -44,7 +43,6 @@ ssh admin@10.0.10.10
 sudo systemctl status named
 ```
 
-![BIND9 service status showing inactive/failed](screenshots/dns-outage-service-down.png)
 
 **Result:** Service is `inactive (dead)` — BIND9 has stopped.
 
@@ -91,7 +89,6 @@ sudo systemctl restart named
 sudo systemctl status named
 ```
 
-![BIND9 service running after fix](screenshots/dns-outage-fixed.png)
 
 ---
 
@@ -117,7 +114,6 @@ nslookup dns.enterprise.lab
 sudo tcpdump -i vlan10 port 53 -c 5
 ```
 
-![Successful DNS resolution after fix](screenshots/dns-outage-verification.png)
 
 ---
 

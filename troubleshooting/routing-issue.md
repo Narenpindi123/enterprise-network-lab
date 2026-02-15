@@ -14,7 +14,6 @@ A new subnet (VLAN 20 — Clients) was added to the network. Clients in VLAN 20 
 
 ## Screenshot — Symptom Observed
 
-![Traceroute from VLAN 20 client showing packets dying at hop 1](screenshots/routing-issue-symptom.png)
 
 ---
 
@@ -46,7 +45,6 @@ traceroute 10.0.10.10
 show ip route
 ```
 
-![Router routing table missing VLAN 20 subnet](screenshots/routing-issue-route-table.png)
 
 **Finding:** The routing table shows:
 ```
@@ -98,7 +96,6 @@ save
 show ip route
 ```
 
-![Router routing table now showing VLAN 20 route](screenshots/routing-issue-fixed.png)
 
 **Expected:** Both subnets now appear:
 ```
@@ -131,7 +128,6 @@ traceroute 10.0.10.10
 ping -c 3 10.0.20.100       # Linux client in VLAN 20
 ```
 
-![Successful ping and traceroute from VLAN 20 after fix](screenshots/routing-issue-verification.png)
 
 ---
 

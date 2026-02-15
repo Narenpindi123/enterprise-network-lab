@@ -13,7 +13,6 @@ New clients added to VLAN 20 **cannot obtain an IP address** via DHCP. They fall
 
 ## Screenshot — Symptom Observed
 
-![Client stuck on APIPA address — no DHCP offer](screenshots/dhcp-failure-symptom.png)
 
 ---
 
@@ -45,7 +44,6 @@ sudo tcpdump -i vlan10 port 67 or port 68 -c 10
 show service dhcp-relay
 ```
 
-![DHCP relay configuration missing relay interface](screenshots/dhcp-failure-relay.png)
 
 **Finding:** The DHCP relay is configured but the relay interface for VLAN 20 is missing:
 ```
@@ -102,7 +100,6 @@ relay-options:
 grep -A 5 "10.0.20" /etc/dhcp/dhcpd.conf
 ```
 
-![DHCP relay configured and working](screenshots/dhcp-failure-fixed.png)
 
 ---
 
@@ -143,7 +140,6 @@ DHCP ACK      ← 10.0.10.11
 sudo dhcp-lease-list
 ```
 
-![New client with valid DHCP lease from VLAN 20 scope](screenshots/dhcp-failure-verification.png)
 
 ---
 

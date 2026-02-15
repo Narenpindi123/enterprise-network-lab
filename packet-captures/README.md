@@ -46,7 +46,6 @@ dns
 
 ### Example Analysis
 
-![DNS query and response in Wireshark](screenshots/dns-capture-wireshark.png)
 
 **Normal DNS resolution flow:**
 ```
@@ -86,7 +85,6 @@ arp
 
 ### Example Analysis
 
-![ARP request and reply in Wireshark](screenshots/arp-capture-wireshark.png)
 
 **Normal ARP resolution:**
 ```
@@ -124,7 +122,6 @@ tcp.flags.syn == 1 || tcp.flags.ack == 1
 
 ### Example Analysis
 
-![TCP three-way handshake in Wireshark](screenshots/tcp-handshake-wireshark.png)
 
 **Successful HTTP connection (port 80):**
 ```

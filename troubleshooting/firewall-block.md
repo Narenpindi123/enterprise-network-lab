@@ -14,7 +14,6 @@ After applying updated firewall rules, VLAN 20 clients **can no longer access th
 
 ## Screenshot — Symptom Observed
 
-![curl to web server timing out from VLAN 20 client](screenshots/firewall-block-symptom.png)
 
 ---
 
@@ -51,7 +50,6 @@ sudo tcpdump -i eth0 host 10.0.10.12 and port 80 -c 5
 sudo nft list chain inet filter forward
 ```
 
-![Firewall rules showing HTTP not permitted](screenshots/firewall-block-rules.png)
 
 **Finding:** The updated rules are missing the HTTP allow rule:
 ```
@@ -99,7 +97,6 @@ sudo nft add rule inet filter forward \
 sudo nft list chain inet filter forward
 ```
 
-![Updated firewall rules showing HTTP rule added](screenshots/firewall-block-fixed.png)
 
 ### Step 3: Save rules persistently
 ```bash
@@ -141,7 +138,6 @@ ACK      10.0.20.100:54321 → 10.0.10.12:80
 sudo dmesg | grep "NFT-FORWARD-DROP" | grep "DPT=80"
 ```
 
-![Successful HTTP connection after firewall fix](screenshots/firewall-block-verification.png)
 
 ---
 

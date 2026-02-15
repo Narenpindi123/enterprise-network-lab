@@ -1,6 +1,6 @@
-# 🏗️ Enterprise Network Design, Implementation & Troubleshooting Lab
+# 🏗️ Enterprise Network Lab — Design, Implementation & Troubleshooting
 
-A fully documented enterprise network lab built from scratch — demonstrating network design, VLAN segmentation, routing, firewalling, DNS/DHCP services, traffic analysis, and real-world troubleshooting.
+A fully functional enterprise network lab built from scratch using **Linux network namespaces** — demonstrating network design, VLAN segmentation, inter-VLAN routing, firewalling, DNS services, traffic analysis, and real-world troubleshooting.
 
 > **This project proves you can design, build, and troubleshoot enterprise infrastructure — not just scan things.**
 
@@ -15,33 +15,26 @@ A fully documented enterprise network lab built from scratch — demonstrating n
 ### Architecture Overview
 
 ```
-[ISP / Internet]
-       |
-       | 203.0.113.0/30
-       |
-┌──────────────┐
-│  Edge Router  │  VyOS 1.4
-│  (VyOS)       │  WAN: 203.0.113.1/30
-│               │  LAN: 10.0.1.1/30
-└──────┬───────┘
-       |
-       | 10.0.1.0/30
-       |
-┌──────────────┐
-│   Firewall    │  nftables
-│  (nftables)   │  10.0.1.2/30
-└──────┬───────┘
-       |
-┌──────────────┐
-│  Core Switch  │  Linux Bridge / OVS
-│  (OVS)        │  VLAN Trunk
-└──┬────────┬──┘
-   |        |
-   |        |
-┌──────┐ ┌──────┐
-│VLAN10│ │VLAN20│
-│Servers│ │Clients│
-└──────┘ └──────┘
+                    ┌──────────────────┐
+                    │    ns-router     │  IP Forwarding + nftables
+                    │  10.0.10.1/24    │  VLAN 10 gateway
+                    │  10.0.20.1/24    │  VLAN 20 gateway
+                    └───┬──────────┬───┘
+                        │          │
+              ┌─────────┘          └─────────┐
+              │                              │
+      ┌───────────────┐              ┌───────────────┐
+      │   br-vlan10   │              │   br-vlan20   │
+      │  (Linux Bridge)│              │  (Linux Bridge)│
+      │  VLAN 10       │              │  VLAN 20       │
+      └──┬─────────┬──┘              └───────┬───────┘
+         │         │                         │
+   ┌─────────┐ ┌─────────┐           ┌─────────────┐
+   │ ns-dns  │ │ ns-web  │           │  ns-client  │
+   │10.0.10.10│ │10.0.10.12│           │ 10.0.20.100 │
+   │ dnsmasq │ │ Python  │           │ Test Client │
+   └─────────┘ │ HTTP    │           └─────────────┘
+               └─────────┘
 ```
 
 ---
@@ -50,101 +43,89 @@ A fully documented enterprise network lab built from scratch — demonstrating n
 
 | Network          | Subnet            | VLAN | Gateway     | Purpose          |
 |:-----------------|:------------------|:-----|:------------|:-----------------|
-| WAN Link         | 203.0.113.0/30    | —    | 203.0.113.2 | ISP Uplink       |
-| Transit Link     | 10.0.1.0/30       | —    | 10.0.1.1    | Router ↔ Switch  |
 | Server VLAN      | 10.0.10.0/24      | 10   | 10.0.10.1   | Infrastructure   |
 | Client VLAN      | 10.0.20.0/24      | 20   | 10.0.20.1   | End Users        |
 
 ### Host Assignments
 
-| Host            | IP Address     | VLAN | Role                |
-|:----------------|:---------------|:-----|:--------------------|
-| Edge Router     | 10.0.10.1      | 10   | Default Gateway     |
-| Core Switch     | 10.0.1.2       | —    | Layer 2/3 Switch    |
-| DNS Server      | 10.0.10.10     | 10   | BIND9 DNS           |
-| DHCP Server     | 10.0.10.11     | 10   | ISC DHCP            |
-| Web Server      | 10.0.10.12     | 10   | Apache HTTP         |
-| Linux Client    | 10.0.20.100    | 20   | Ubuntu Workstation  |
-| Windows Client  | 10.0.20.101    | 20   | Windows 10          |
+| Host            | IP Address     | VLAN | Role                   |
+|:----------------|:---------------|:-----|:-----------------------|
+| Router          | 10.0.10.1 / 10.0.20.1 | 10/20 | Default Gateway, Firewall |
+| DNS Server      | 10.0.10.10     | 10   | dnsmasq DNS (enterprise.lab) |
+| Web Server      | 10.0.10.12     | 10   | Python HTTP Server     |
+| Linux Client    | 10.0.20.100    | 20   | Test Endpoint          |
 
 ---
 
 ## ⚙️ Components & Configuration
 
-### 1. Edge Router (VyOS)
-Inter-VLAN routing, NAT masquerade, DHCP relay, DNS forwarding.
+### 1. Router (ns-router)
+Inter-VLAN routing with IP forwarding and nftables firewall.
 
-![Router Configuration](screenshots/router-config.png)
+![Router — Cross-VLAN Connectivity Tests](screenshots/router-config.png)
 
 **Key features:**
-- Router-on-a-stick with VLAN sub-interfaces (`eth1.10`, `eth1.20`)
-- Source NAT for internet access from both VLANs
-- DHCP relay forwarding VLAN 20 requests to DHCP server in VLAN 10
-- DNS forwarding to internal DNS server
+- Dual-homed router connecting VLAN 10 and VLAN 20 via veth pairs
+- IP forwarding enabled (`net.ipv4.ip_forward=1`)
+- Routes both subnets through the router namespace
+- Stateful nftables firewall on the router itself
 
-📄 **Config:** [`configs/router.conf`](configs/router.conf)
+📄 **Reference config (production VyOS equivalent):** [`configs/router.conf`](configs/router.conf)
 
 ---
 
-### 2. Firewall (nftables)
+### 2. Firewall (nftables on ns-router)
 VLAN-to-VLAN traffic control with defense-in-depth.
 
-![Firewall Rules](screenshots/firewall-rules-output.png)
+![Firewall Rules & HTTP Test](screenshots/firewall-rules-output.png)
 
 **Policy highlights:**
 - Default FORWARD policy: `DROP` (deny all, allow specific)
 - VLAN 20 → VLAN 10: Allow DNS (53), HTTP/S (80/443), ICMP
 - VLAN 20 → VLAN 10: Block SSH, file shares, lateral movement
-- NAT masquerade for outbound internet
 - All drops logged with `[NFT-FORWARD-DROP]` prefix
 
 📄 **Config:** [`configs/firewall.rules`](configs/firewall.rules)
 
 ---
 
-### 3. VLAN Segmentation (Linux Bridge / OVS)
-Traffic isolation using 802.1Q VLANs.
+### 3. VLAN Segmentation (Linux Bridges)
+Traffic isolation using per-VLAN bridges and veth pairs.
 
-![VLAN Interfaces](screenshots/vlan-interfaces-output.png)
+![VLAN Interfaces & Namespace Configuration](screenshots/vlan-interfaces-output.png)
 
 **Setup:**
-- VLAN 10 (ID 10): Server infrastructure — isolated from client traffic
-- VLAN 20 (ID 20): Client endpoints — restricted server access
-- Linux bridges per VLAN for local switching
-- Trunk port to router carries tagged traffic
+- VLAN 10 (`br-vlan10`): Server infrastructure — isolated from client traffic
+- VLAN 20 (`br-vlan20`): Client endpoints — restricted server access
+- veth pairs connect each namespace to the appropriate bridge
+- Router namespace has interfaces on both bridges for inter-VLAN routing
 
-📄 **Config:** [`configs/vlan-setup.sh`](configs/vlan-setup.sh)
+📄 **Reference config:** [`configs/vlan-setup.sh`](configs/vlan-setup.sh)
 
 ---
 
-### 4. DNS Server (BIND9)
+### 4. DNS Server (dnsmasq in ns-dns)
 Internal name resolution for `enterprise.lab` domain.
 
-![DNS Resolution](screenshots/dns-resolution-output.png)
+![DNS Resolution — dig Output](screenshots/dns-resolution-output.png)
 
 **Features:**
-- Forward zone: `enterprise.lab` with A records for all hosts
-- Reverse zones for PTR lookups
-- External query forwarding to `8.8.8.8` / `8.8.4.4`
-- Recursive queries restricted to internal VLANs
+- Forward lookups: `web.enterprise.lab` → `10.0.10.12`
+- Hosts file–based resolution for all internal systems
+- External query forwarding to `8.8.8.8`
+- Query logging for troubleshooting
 
-📄 **Configs:** [`configs/dns/named.conf`](configs/dns/named.conf) · [`configs/dns/db.enterprise.lab`](configs/dns/db.enterprise.lab)
+📄 **Reference configs (production BIND9 equivalent):** [`configs/dns/named.conf`](configs/dns/named.conf) · [`configs/dns/db.enterprise.lab`](configs/dns/db.enterprise.lab)
 
 ---
 
-### 5. DHCP Server (ISC DHCP)
-Automatic IP assignment with per-VLAN scopes.
+### 5. Web Server (Python HTTP in ns-web)
+Serves HTML content from the web server namespace.
 
-**Scopes:**
-| VLAN   | Range                   | Lease Time | DNS Server  |
-|:-------|:------------------------|:-----------|:------------|
-| VLAN 10| 10.0.10.100 – .200      | 1 hour     | 10.0.10.10  |
-| VLAN 20| 10.0.20.100 – .200      | 1 hour     | 10.0.10.10  |
-
-- Static reservations for DNS, DHCP, and Web servers
-- DHCP relay on router for cross-VLAN DHCP
-
-📄 **Config:** [`configs/dhcp.conf`](configs/dhcp.conf)
+**Details:**
+- Python 3 `http.server` listening on `10.0.10.12:80`
+- Serves a simple HTML page identifying the enterprise lab
+- Accessible from the client VLAN (cross-VLAN via router)
 
 ---
 
@@ -166,15 +147,25 @@ Each playbook documents a real failure scenario with: **Symptoms → Diagnosis �
 
 ## 🤖 Automation Scripts
 
+### Lab Setup & Teardown
+Build or destroy the full lab environment with a single command.
+
+```bash
+sudo bash scripts/lab-setup.sh      # Build entire lab
+sudo bash scripts/lab-teardown.sh   # Clean teardown
+```
+
+📄 **Scripts:** [`scripts/lab-setup.sh`](scripts/lab-setup.sh) · [`scripts/lab-teardown.sh`](scripts/lab-teardown.sh)
+
+---
+
 ### Network Validation Suite
 Comprehensive connectivity and service validation.
-
-![Network Validation Output](screenshots/network-validation-output.png)
 
 ```bash
 sudo bash scripts/validate-network.sh
 ```
-Checks: ICMP reachability, DNS resolution, DHCP, HTTP, routing table, firewall status.
+Checks: ICMP reachability, DNS resolution, HTTP, routing table, firewall status.
 
 📄 **Script:** [`scripts/validate-network.sh`](scripts/validate-network.sh)
 
@@ -182,8 +173,6 @@ Checks: ICMP reachability, DNS resolution, DHCP, HTTP, routing table, firewall s
 
 ### Python Health Dashboard
 Real-time health monitoring with colored output and JSON export.
-
-![Health Dashboard Output](screenshots/health-dashboard-output.png)
 
 ```bash
 python3 scripts/network-health.py           # One-time check
@@ -209,17 +198,20 @@ sudo bash scripts/capture-traffic.sh all    # All captures
 
 ---
 
-## 📦 Packet Capture Analysis
+## 📦 Packet Capture & Analysis
 
-Detailed analysis of captured network traffic with Wireshark filters and examples.
+Live packet captures from the router interface showing real traffic traversing the network.
+
+![Live Packet Capture — tcpdump on Router](screenshots/network-validation-output.png)
 
 | Capture Type | Protocol | Key Observations |
 |:-------------|:---------|:-----------------|
-| DNS          | UDP 53   | Query/response pairs, NXDOMAIN detection |
-| ARP          | Layer 2  | MAC resolution, gratuitous ARP, spoofing |
-| TCP          | TCP      | 3-way handshake, retransmissions, RST    |
+| ICMP         | Layer 3  | Echo request/reply, cross-VLAN with ttl=63 |
+| ARP          | Layer 2  | MAC resolution between router and servers |
+| DNS          | UDP 53   | Query/response pairs for enterprise.lab |
+| TCP/HTTP     | TCP 80   | 3-way handshake, GET request, 200 OK response |
 
-📄 **Analysis:** [`packet-captures/README.md`](packet-captures/README.md)
+📄 **Analysis guide:** [`packet-captures/README.md`](packet-captures/README.md)
 
 ---
 
@@ -250,12 +242,12 @@ enterprise-network-lab/
 │   └── network-topology.png           ← Network architecture diagram
 │
 ├── configs/
-│   ├── router.conf                    ← VyOS router configuration
+│   ├── router.conf                    ← VyOS router config (production reference)
 │   ├── firewall.rules                 ← nftables firewall ruleset
-│   ├── dhcp.conf                      ← ISC DHCP server config
+│   ├── dhcp.conf                      ← ISC DHCP config (production reference)
 │   ├── vlan-setup.sh                  ← VLAN & bridge setup script
 │   └── dns/
-│       ├── named.conf                 ← BIND9 DNS server config
+│       ├── named.conf                 ← BIND9 DNS config (production reference)
 │       └── db.enterprise.lab          ← DNS zone file
 │
 ├── troubleshooting/
@@ -275,13 +267,12 @@ enterprise-network-lab/
 ├── packet-captures/
 │   └── README.md                      ← Capture methodology & analysis
 │
-└── screenshots/                       ← Real screenshots from running lab
-    ├── router-config.png
-    ├── firewall-rules-output.png
-    ├── dns-resolution-output.png
+└── screenshots/                       ← Real terminal screenshots from running lab
     ├── vlan-interfaces-output.png
-    ├── network-validation-output.png
-    └── health-dashboard-output.png
+    ├── router-config.png
+    ├── dns-resolution-output.png
+    ├── firewall-rules-output.png
+    └── network-validation-output.png
 ```
 
 ---
@@ -290,11 +281,11 @@ enterprise-network-lab/
 
 ### Prerequisites
 - Linux host (Ubuntu 22.04+ recommended)
-- `iproute2`, `nftables`, `dnsmasq`, `tcpdump` installed
+- `iproute2`, `nftables`, `dnsmasq`, `tcpdump`, `dig` installed
 - Root/sudo access (for network namespaces)
 
 ### Setup Steps
-1. **Clone the repo** — `git clone https://github.com/yourusername/enterprise-network-lab.git`
+1. **Clone the repo** — `git clone https://github.com/Narenpindi123/enterprise-network-lab.git`
 2. **Build the entire lab** — `sudo bash scripts/lab-setup.sh`
 3. **Verify connectivity** — `sudo ip netns exec ns-client ping 10.0.10.10`
 4. **Test DNS** — `sudo ip netns exec ns-client dig @10.0.10.10 web.enterprise.lab`
@@ -308,11 +299,12 @@ enterprise-network-lab/
 
 > **Enterprise Network Design & Troubleshooting Lab**
 >
-> - Designed and implemented a multi-subnet enterprise network using VLAN segmentation, inter-VLAN routing, and firewall policies to simulate real-world infrastructure
-> - Configured core network services including DHCP, DNS, NAT, and static routing, ensuring reliable connectivity across Linux and Windows endpoints
-> - Performed packet-level traffic analysis using Wireshark and tcpdump to validate TCP handshakes, DNS resolution, and routing behavior
-> - Simulated and resolved common enterprise network failures (DNS outages, routing misconfigurations, firewall blocks), documenting root cause analysis and remediation steps
-> - Created detailed network diagrams, configuration documentation, and troubleshooting playbooks to support operational handover
+> - Designed and implemented a multi-VLAN enterprise network using Linux network namespaces, bridges, and veth pairs to simulate isolated router, DNS, web server, and client environments on a single host
+> - Configured inter-VLAN routing with IP forwarding and nftables firewall rules enforcing a deny-all-allow-specific policy for cross-VLAN traffic (DNS, HTTP, ICMP)
+> - Deployed dnsmasq DNS server with enterprise.lab zone, enabling forward lookups, query logging, and external forwarding
+> - Performed packet-level traffic analysis using tcpdump to validate ICMP echo, DNS A queries, TCP three-way handshakes, and HTTP request/response flows across VLANs
+> - Authored 5 troubleshooting playbooks documenting root cause analysis and remediation for DNS outages, routing failures, VLAN misconfigurations, DHCP relay issues, and firewall blocks
+> - Created automation scripts (Bash, Python) for lab provisioning, teardown, network validation, and real-time health monitoring with JSON export
 
 ---
 

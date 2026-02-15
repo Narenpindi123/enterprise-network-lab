@@ -14,7 +14,6 @@ After a maintenance window, clients on VLAN 20 **can no longer communicate** wit
 
 ## Screenshot — Symptom Observed
 
-![VLAN 20 client cannot reach gateway or peers](screenshots/vlan-misconfig-symptom.png)
 
 ---
 
@@ -42,7 +41,6 @@ ip -d link show eth1.20
 cat /proc/net/vlan/eth1.20
 ```
 
-![VLAN tag mismatch on core switch](screenshots/vlan-misconfig-diagnosis.png)
 
 **Finding:**
 ```
@@ -106,7 +104,6 @@ ip -d link show eth1.20
 cat /proc/net/vlan/eth1.20
 ```
 
-![Corrected VLAN ID showing 20](screenshots/vlan-misconfig-fixed.png)
 
 ---
 
@@ -133,7 +130,6 @@ arping -c 3 10.0.20.1
 sudo tcpdump -i eth1 -e -c 10 vlan
 ```
 
-![Successful VLAN 20 communication after fix](screenshots/vlan-misconfig-verification.png)
 
 ---
 
